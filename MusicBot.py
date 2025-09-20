@@ -62,7 +62,7 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 @bot.event
 async def on_ready():
     await bot.tree.sync()
-    print(f"{bot.user} снова тут")
+    print(f"{bot.user} версия 1.3 на месте")
 
 @bot.tree.command(name="skip", description="Пропускает текущую песню")
 async def skip(interaction: discord.Interaction):
