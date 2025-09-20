@@ -3,3 +3,4 @@ yt_dlp
 python-dotenv
 PyNaCl
 flask
+beautifulsoup4
