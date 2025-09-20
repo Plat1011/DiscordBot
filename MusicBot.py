@@ -139,39 +139,27 @@ async def play(interaction: discord.Interaction, song_query: str):
 
     tracks = []
     source_name = ""
-    
+
     # Check if input is a direct URL
     is_url = song_query.startswith(('http://', 'https://'))
-    
+
     if is_url:
-        # Handle direct URLs
-        ydl_opts = {
-            "format": "bestaudio/best",
-            "noplaylist": True,
-            "quiet": True,
-            "no_warnings": True,
-        }
-        
+        # Handle direct URLs (YouTube or Bandcamp)
+        ydl_opts = {"format": "bestaudio/best", "noplaylist": True, "quiet": True, "no_warnings": True}
         try:
             results = await search_ytdlp_async(song_query, ydl_opts, use_cookies=False)
             if results.get("entries"):
                 tracks = results["entries"]
             else:
-                tracks = [results]  # Single track
+                tracks = [results]
             source_name = results.get("extractor_key", "Unknown")
         except Exception as e:
             print(f"Direct URL failed: {e}")
             await interaction.followup.send("Штаб: ошибка обработки ссылки.")
             return
     else:
-        # Search logic - try YouTube first, then SoundCloud
-        ydl_opts_yt = {
-            "format": "bestaudio[abr<=96]/bestaudio",
-            "noplaylist": True,
-            "quiet": True,
-            "no_warnings": True,
-        }
-        
+        # Search YouTube first
+        ydl_opts_yt = {"format": "bestaudio[abr<=96]/bestaudio", "noplaylist": True, "quiet": True, "no_warnings": True}
         try:
             results = await search_ytdlp_async(f"ytsearch1:{song_query}", ydl_opts_yt, use_cookies=False)
             tracks = results.get("entries", [])
@@ -180,28 +168,30 @@ async def play(interaction: discord.Interaction, song_query: str):
                 raise Exception("No YouTube results")
         except Exception as e:
             print(f"YouTube search failed: {e}")
-            # SoundCloud search disabled due to API authentication issues
-            # Direct SoundCloud URLs still work when pasted directly
-            await interaction.followup.send("Штаб: YouTube недоступен. Для SoundCloud используйте прямые ссылки.")
-            return
+            # Bandcamp search fallback
+            ydl_opts_bc = {"format": "bestaudio/best", "noplaylist": True, "quiet": True, "no_warnings": True}
+            try:
+                results = await search_ytdlp_async(f"bandcampsearch1:{song_query}", ydl_opts_bc, use_cookies=False)
+                tracks = results.get("entries", [])
+                source_name = "Bandcamp"
+                if not tracks:
+                    await interaction.followup.send("Штаб: трек не найден на YouTube и Bandcamp.")
+                    return
+            except Exception as e2:
+                print(f"Bandcamp search failed: {e2}")
+                await interaction.followup.send("Штаб: поиск на Bandcamp невозможен.")
+                return
 
-    # Use first track and extract detailed info with headers
+    # Use first track and extract detailed info
     first = tracks[0]
     webpage_url = first.get("webpage_url") or first.get("url")
-    
-    # Re-extract to get headers and final URL
-    extract_opts = {
-        "format": "bestaudio/best",
-        "quiet": True,
-        "no_warnings": True,
-    }
-    
+    extract_opts = {"format": "bestaudio/best", "quiet": True, "no_warnings": True}
+
     try:
         detailed_info = await search_ytdlp_async(webpage_url, extract_opts, use_cookies=False)
         title = detailed_info.get("title", "Untitled")
         audio_url = detailed_info.get("url")
         http_headers = detailed_info.get("http_headers", {})
-        
     except Exception as e:
         print(f"Header extraction failed: {e}")
         title = first.get("title", "Untitled")
@@ -223,19 +213,14 @@ async def play(interaction: discord.Interaction, song_query: str):
 async def play_next_song(vc, gid, channel):
     if SONG_QUEUES[gid]:
         audio_url, title, http_headers = SONG_QUEUES[gid].popleft()
-
-        # Build headers string for FFmpeg
         before_options = "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
         if http_headers:
             header_pairs = [f"{k}: {v}" for k, v in http_headers.items()]
             headers_str = "\r\n".join(header_pairs) + "\r\n"
             before_options += f" -headers {shlex.quote(headers_str)}"
 
-        ffmpeg_opts = {
-            "before_options": before_options,
-            "options": "-vn",
-        }
-        
+        ffmpeg_opts = {"before_options": before_options, "options": "-vn"}
+
         try:
             source = discord.FFmpegOpusAudio(audio_url, **ffmpeg_opts)
 
@@ -248,7 +233,7 @@ async def play_next_song(vc, gid, channel):
             asyncio.create_task(channel.send(f"Штаб: сигнал в эфире — **{title}**"))
         except Exception as e:
             print(f"Ошибка воспроизведения {title}: {e}")
-            await play_next_song(vc, gid, channel)  # Try next song
+            await play_next_song(vc, gid, channel)
     else:
         await channel.send("Штаб Charlie squad: ретрансляция завершена.")
         SONG_QUEUES[gid] = deque()

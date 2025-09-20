@@ -4,9 +4,8 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="fbb44ffe-14be-4efa-a6df-79436bf19677" name="Changes" comment="Soundcloud url fix 3">
+    <list default="true" id="fbb44ffe-14be-4efa-a6df-79436bf19677" name="Changes" comment="Soundcloud url fix 4">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/MusicBot.py" beforeDir="false" afterPath="$PROJECT_DIR$/MusicBot.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -15,6 +14,7 @@
   </component>
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+    <option name="UPDATE_TYPE" value="REBASE" />
   </component>
   <component name="GitHubPullRequestSearchHistory"><![CDATA[{
   "lastFilter": {
@@ -195,7 +195,15 @@
       <option name="project" value="LOCAL" />
       <updated>1758399304668</updated>
     </task>
-    <option name="localTasksCounter" value="18" />
+    <task id="LOCAL-00018" summary="Soundcloud url fix 4">
+      <option name="closed" value="true" />
+      <created>1758400761428</created>
+      <option name="number" value="00018" />
+      <option name="presentableId" value="LOCAL-00018" />
+      <option name="project" value="LOCAL" />
+      <updated>1758400761428</updated>
+    </task>
+    <option name="localTasksCounter" value="19" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -249,6 +257,7 @@
     <MESSAGE value="Soundcloud url fix" />
     <MESSAGE value="Soundcloud url fix 2" />
     <MESSAGE value="Soundcloud url fix 3" />
-    <option name="LAST_COMMIT_MESSAGE" value="Soundcloud url fix 3" />
+    <MESSAGE value="Soundcloud url fix 4" />
+    <option name="LAST_COMMIT_MESSAGE" value="Soundcloud url fix 4" />
   </component>
 </project>
