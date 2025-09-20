@@ -1,4 +1,6 @@
 # Importing libraries and modules
+from flask import Flask
+from threading import Thread
 import os
 import discord
 from discord.ext import commands
@@ -7,6 +9,18 @@ from dotenv import load_dotenv
 import yt_dlp # NEW
 from collections import deque # NEW
 import asyncio # NEW
+
+
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot is running!"
+
+def run():
+    app.run(host='0.0.0.0', port=8080)
+
+Thread(target=run).start()
 
 # Environment variables for tokens and other sensitive data
 load_dotenv()
