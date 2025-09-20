@@ -66,7 +66,7 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 @bot.event
 async def on_ready():
     await bot.tree.sync()
-    print(f"[Bot] {bot.user} снова тут")
+    print(f"[Bot] {bot.user} v1.6")
 
 # Helper commands: skip, pause, resume, stop
 @bot.tree.command(name="skip", description="Пропускает текущую песню")
