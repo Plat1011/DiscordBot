@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 import yt_dlp # NEW
 from collections import deque # NEW
 import asyncio # NEW
+import tempfile
 
 
 app = Flask('')
@@ -34,16 +35,25 @@ async def search_ytdlp_async(query, ydl_opts):
     return await loop.run_in_executor(None, lambda: _extract(query, ydl_opts))
 
 def _extract(query, ydl_opts):
-    with open("cookies.txt", "w") as f:
-        f.write(os.getenv("YT_COOKIES"))
+    # создаём временный файл cookies из секретов Replit
+    cookie_content = os.getenv("YT_COOKIES")
+    if not cookie_content:
+        raise Exception("YT_COOKIES не задан в секретах Replit!")
+
+    with tempfile.NamedTemporaryFile(mode="w+", delete=False) as f:
+        f.write(cookie_content)
+        cookie_path = f.name
+
+    # Передаём путь к временным cookies yt-dlp
+    ydl_opts["cookiefile"] = cookie_path
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             return ydl.extract_info(query, download=False)
     finally:
-        # Удаляем временный файл после извлечения
-        if os.path.exists("cookies.txt"):
-            os.remove("cookies.txt")
+        # удаляем временный файл после использования
+        if os.path.exists(cookie_path):
+            os.remove(cookie_path)
 
 
 # Setup of intents. Intents are permissions the bot has on the server
@@ -139,9 +149,7 @@ async def play(interaction: discord.Interaction, song_query: str):
         "noplaylist": True,
         "youtube_include_dash_manifest": False,
         "youtube_include_hls_manifest": False,
-        "cookiefile": "cookies.txt"  # временный файл
     }
-
 
     query = "ytsearch1: " + song_query
 
@@ -152,11 +160,10 @@ async def play(interaction: discord.Interaction, song_query: str):
             await interaction.followup.send("Таких не знаю в эфире 5G…")
             return
     except Exception as e:
-        # Если yt-dlp не смог получить видео (например, YouTube требует авторизацию)
         await interaction.followup.send(
             "Сигналы 5G заблокировали доступ к этой песне. Кто-то контролирует эфир…"
         )
-        print(f"YT-DLP ERROR: {e}")  # Логи для дебага
+        print(f"YT-DLP ERROR: {e}")
         return
 
     first_track = tracks[0]
@@ -174,7 +181,6 @@ async def play(interaction: discord.Interaction, song_query: str):
     else:
         await interaction.followup.send(f"Сейчас эфир 5G транслирует: **{title}**. Осторожно, сигнал может контролировать мысли… 😉")
         await play_next_song(voice_client, guild_id, interaction.channel)
-
 
 
 async def play_next_song(voice_client, guild_id, channel):
