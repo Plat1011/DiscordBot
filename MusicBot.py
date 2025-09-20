@@ -42,29 +42,46 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 @bot.event
 async def on_ready():
     await bot.tree.sync()
-    print(f"[Bot] {bot.user} v1.7 - Bandcamp only")
+    print(f"[Bot] {bot.user} v1.8 - Bandcamp only with debug")
 
+# -----------------------------
 # Helper functions
+# -----------------------------
 def search_bandcamp(query):
-    """Ищем первый трек на Bandcamp по запросу"""
-    url = f"https://bandcamp.com/search?q={query.replace(' ', '+')}"
-    resp = requests.get(url)
-    soup = BeautifulSoup(resp.text, "html.parser")
-    track = soup.select_one(".searchresult.track > a")
-    if track:
-        return track['href']
-    return None
+    """Ищем первый трек на Bandcamp по запросу с дебагом"""
+    search_url = f"https://bandcamp.com/search?q={query.replace(' ', '+')}"
+    print(f"[Debug] Поиск Bandcamp по URL: {search_url}")
+    try:
+        resp = requests.get(search_url, timeout=10)
+        print(f"[Debug] HTTP статус: {resp.status_code}")
+        if resp.status_code != 200:
+            print("[Debug] Ошибка запроса к Bandcamp")
+            return None
+        soup = BeautifulSoup(resp.text, "html.parser")
+        results = soup.select("li.searchresult.track a")
+        print(f"[Debug] Найдено треков: {len(results)}")
+        if results:
+            track_url = results[0]["href"]
+            print(f"[Debug] Первый трек: {track_url}")
+            return track_url
+        return None
+    except Exception as e:
+        print(f"[Debug] Ошибка поиска Bandcamp: {e}")
+        return None
 
 async def get_bandcamp_info(track_url):
     """Получаем аудио URL с Bandcamp через yt_dlp"""
     ydl_opts = {"format": "bestaudio/best", "quiet": True, "no_warnings": True}
     loop = asyncio.get_running_loop()
     def extract():
+        print(f"[Debug] Извлечение информации через yt_dlp: {track_url}")
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             return ydl.extract_info(track_url, download=False)
     return await loop.run_in_executor(None, extract)
 
+# -----------------------------
 # Bot commands: skip, pause, resume, stop
+# -----------------------------
 @bot.tree.command(name="skip", description="Пропускает текущую песню")
 async def skip(interaction: discord.Interaction):
     vc = interaction.guild.voice_client
@@ -107,7 +124,9 @@ async def stop(interaction: discord.Interaction):
     await vc.disconnect()
     await interaction.response.send_message("[Stop] Сигнал остановлен, очередь очищена.")
 
+# -----------------------------
 # Play command
+# -----------------------------
 @bot.tree.command(name="play", description="Запустить песню с Bandcamp")
 @app_commands.describe(song_query="Поиск трека на Bandcamp")
 async def play(interaction: discord.Interaction, song_query: str):
@@ -134,9 +153,9 @@ async def play(interaction: discord.Interaction, song_query: str):
         info = await get_bandcamp_info(track_url)
         title = info.get("title", "Untitled")
         audio_url = info.get("url")
-        print(f"[Play] Подготовка к воспроизведению: {title}")
+        print(f"[Debug] Подготовка к воспроизведению: {title}")
     except Exception as e:
-        print(f"[Play] Ошибка извлечения трека: {e}")
+        print(f"[Debug] Ошибка извлечения трека: {e}")
         await interaction.followup.send("[Play] Не удалось получить аудио.")
         return
 
@@ -151,7 +170,9 @@ async def play(interaction: discord.Interaction, song_query: str):
         await interaction.followup.send(f"[Play] В эфире: {title}")
         await play_next_song(vc, gid, interaction.channel)
 
-# Play next
+# -----------------------------
+# Play next song
+# -----------------------------
 async def play_next_song(vc, gid, channel):
     if SONG_QUEUES[gid]:
         audio_url, title = SONG_QUEUES[gid].popleft()
@@ -171,5 +192,7 @@ async def play_next_song(vc, gid, channel):
         await channel.send("[Queue] Очередь завершена.")
         SONG_QUEUES[gid] = deque()
 
+# -----------------------------
 # Run the bot
+# -----------------------------
 bot.run(TOKEN)
