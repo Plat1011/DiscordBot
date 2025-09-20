@@ -29,27 +29,34 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 # Create the structure for queueing songs - Dictionary of queues
 SONG_QUEUES = {}
 
-async def search_ytdlp_async(query, ydl_opts):
+# search_ytdlp_async теперь принимает флаг use_cookies
+async def search_ytdlp_async(query, ydl_opts, use_cookies: bool = True):
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, lambda: _extract(query, ydl_opts))
+    return await loop.run_in_executor(None, lambda: _extract(query, ydl_opts, use_cookies))
 
-def _extract(query, ydl_opts):
-    cookie_content = os.getenv("YT_COOKIES")
-    if not cookie_content:
-        raise Exception("YT_COOKIES не задан в секретах Replit!")
+def _extract(query, ydl_opts, use_cookies: bool = True):
+    cookie_path = None
 
-    with tempfile.NamedTemporaryFile(mode="w+", delete=False) as f:
-        f.write(cookie_content)
-        cookie_path = f.name
-
-    ydl_opts["cookiefile"] = cookie_path
+    # если нужно использовать куки — создаём временный файл из секрета YT_COOKIES
+    if use_cookies:
+        cookie_content = os.getenv("YT_COOKIES")
+        if not cookie_content:
+            # если куки не заданы — не продолжаем с YouTube
+            raise Exception("YT_COOKIES not set in Replit secrets, cannot use cookies for YouTube.")
+        with tempfile.NamedTemporaryFile(mode="w+", delete=False) as f:
+            f.write(cookie_content)
+            cookie_path = f.name
+        # временно добавляем cookiefile к опциям
+        ydl_opts["cookiefile"] = cookie_path
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             return ydl.extract_info(query, download=False)
     finally:
-        if os.path.exists(cookie_path):
+        # удаляем временный файл cookies, если создали
+        if cookie_path and os.path.exists(cookie_path):
             os.remove(cookie_path)
+
 
 # Setup of intents
 intents = discord.Intents.default()
@@ -135,30 +142,52 @@ async def play(interaction: discord.Interaction, song_query: str):
     elif voice_channel != voice_client.channel:
         await voice_client.move_to(voice_channel)
 
-    ydl_options = {
+    # базовые опции — сначала используем для YouTube (с куками)
+    ydl_options_youtube = {
         "format": "bestaudio[abr<=96]/bestaudio",
         "noplaylist": True,
         "youtube_include_dash_manifest": False,
         "youtube_include_hls_manifest": False,
+        "quiet": True,
+        "no_warnings": True,
     }
 
     query = "ytsearch1: " + song_query
 
+    # Первый этап: пробуем YouTube (с куками). Если не получилось — падаем на SoundCloud.
     try:
-        results = await search_ytdlp_async(query, ydl_options)
+        results = await search_ytdlp_async(query, dict(ydl_options_youtube), use_cookies=True)
         tracks = results.get("entries")
         if not tracks:
-            await interaction.followup.send("Штаб: сигнал не обнаружен, канал связи пуст.")
-            return
+            # попробуем SoundCloud дальше
+            raise Exception("No YouTube entries")
     except Exception as e:
-        await interaction.followup.send(
-            "Штаб: каналы заблокированы, доступ к частоте невозможен."
-        )
-        print(f"YT-DLP ERROR: {e}")
-        return
+        print(f"YT-DLP (YouTube) failed: {e}")
+        # Попытка SoundCloud
+        ydl_options_sc = {
+            "format": "bestaudio/best",
+            "noplaylist": True,
+            "quiet": True,
+            "no_warnings": True,
+        }
+        sc_query = "scsearch1: " + song_query
+        try:
+            results = await search_ytdlp_async(sc_query, dict(ydl_options_sc), use_cookies=False)
+            tracks = results.get("entries")
+            if not tracks:
+                await interaction.followup.send("Штаб: сигнал не обнаружен, канал связи пуст.")
+                return
+        except Exception as e2:
+            print(f"YT-DLP (SoundCloud) failed: {e2}")
+            await interaction.followup.send(
+                "Штаб: каналы заблокированы, доступ к частоте невозможен."
+            )
+            return
 
+    # Если дошли сюда — в tracks есть хотя бы один элемент (YouTube или SoundCloud)
     first_track = tracks[0]
-    audio_url = first_track["url"]
+    # Некоторые экстракторы возвращают прямой 'url' для ffmpeg, некоторые — 'webpage_url' и т.д.
+    audio_url = first_track.get("url") or first_track.get("webpage_url")
     title = first_track.get("title", "Untitled")
 
     guild_id = str(interaction.guild_id)
@@ -176,6 +205,7 @@ async def play(interaction: discord.Interaction, song_query: str):
             f"Штаб Charlie squad активировал ретрансляцию: **{title}**. Каналы проверены, контрольные точки выставлены."
         )
         await play_next_song(voice_client, guild_id, interaction.channel)
+
 
 async def play_next_song(voice_client, guild_id, channel):
     if SONG_QUEUES[guild_id]:
