@@ -66,7 +66,7 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 @bot.event
 async def on_ready():
     await bot.tree.sync()
-    print(f"[Bot] {bot.user} v1.6")
+    print(f"[Bot] {bot.user} v1.7 - Bandcamp only")
 
 # Helper commands: skip, pause, resume, stop
 @bot.tree.command(name="skip", description="Пропускает текущую песню")
@@ -111,9 +111,9 @@ async def stop(interaction: discord.Interaction):
     await vc.disconnect()
     await interaction.response.send_message("[Stop] Сигнал остановлен, очередь очищена.")
 
-# Play command
+# Play command (Bandcamp only)
 @bot.tree.command(name="play", description="Запустить песню или добавить в очередь")
-@app_commands.describe(song_query="Search query")
+@app_commands.describe(song_query="Название трека или ссылка Bandcamp")
 async def play(interaction: discord.Interaction, song_query: str):
     await interaction.response.defer()
     if not interaction.user.voice or not interaction.user.voice.channel:
@@ -128,35 +128,25 @@ async def play(interaction: discord.Interaction, song_query: str):
         await vc.move_to(voice_channel)
 
     tracks = []
-    source_name = ""
-
-    is_url = song_query.startswith(('http://', 'https://'))
+    source_name = "Bandcamp"
 
     try:
-        if is_url:
-            print(f"[Play] Прямая ссылка: {song_query}")
+        if not song_query.startswith(('http://', 'https://')):
+            # Bandcamp search
+            ydl_opts_bc = {"format": "bestaudio/best", "noplaylist": True, "quiet": True, "no_warnings": True}
+            results = await search_ytdlp_async(f"bandcampsearch1:{song_query}", ydl_opts_bc, use_cookies=False)
+            tracks = results.get("entries", [])
+            if not tracks:
+                await interaction.followup.send("[Play] Трек не найден на Bandcamp.")
+                return
+        else:
+            # Прямая ссылка
             ydl_opts = {"format": "bestaudio/best", "noplaylist": True, "quiet": True, "no_warnings": True}
             results = await search_ytdlp_async(song_query, ydl_opts, use_cookies=False)
             tracks = results.get("entries") or [results]
-            source_name = results.get("extractor_key", "Unknown")
-        else:
-            # YouTube search
-            ydl_opts_yt = {"format": "bestaudio[abr<=96]/bestaudio", "noplaylist": True, "quiet": True, "no_warnings": True}
-            results = await search_ytdlp_async(f"ytsearch1:{song_query}", ydl_opts_yt, use_cookies=False)
-            tracks = results.get("entries", [])
-            source_name = "YouTube"
-            if not tracks:
-                # Bandcamp search
-                ydl_opts_bc = {"format": "bestaudio/best", "noplaylist": True, "quiet": True, "no_warnings": True}
-                results = await search_ytdlp_async(f"bandcampsearch1:{song_query}", ydl_opts_bc, use_cookies=False)
-                tracks = results.get("entries", [])
-                source_name = "Bandcamp"
-            if not tracks:
-                await interaction.followup.send("[Play] Трек не найден на YouTube или Bandcamp.")
-                return
     except Exception as e:
-        print(f"[Play] Ошибка поиска: {e}")
-        await interaction.followup.send("[Play] Ошибка поиска трека.")
+        print(f"[Play] Ошибка поиска Bandcamp: {e}")
+        await interaction.followup.send("[Play] Ошибка поиска трека на Bandcamp.")
         return
 
     # Use first track
@@ -168,67 +158,48 @@ async def play(interaction: discord.Interaction, song_query: str):
         detailed_info = await search_ytdlp_async(webpage_url, extract_opts, use_cookies=False)
         title = detailed_info.get("title", "Untitled")
         audio_url = detailed_info.get("url")
-        http_headers = detailed_info.get("http_headers", {})
-        print(f"[Play] Подготовка к воспроизведению: {title} ({source_name})")
+        print(f"[Play] Подготовка к воспроизведению: {title}")
     except Exception as e:
         print(f"[Play] Ошибка извлечения деталей: {e}")
         title = first.get("title", "Untitled")
         audio_url = first.get("url")
-        http_headers = {}
 
     gid = str(interaction.guild_id)
     if gid not in SONG_QUEUES:
         SONG_QUEUES[gid] = deque()
-    SONG_QUEUES[gid].append((audio_url, title, http_headers))
+    SONG_QUEUES[gid].append((audio_url, title))
 
     if vc.is_playing() or vc.is_paused():
-        await interaction.followup.send(f"[Queue] {title} ({source_name}) добавлен в очередь.")
+        await interaction.followup.send(f"[Queue] {title} добавлен в очередь.")
     else:
-        await interaction.followup.send(f"[Play] Активирована ретрансляция: {title} ({source_name})")
+        await interaction.followup.send(f"[Play] Активирована ретрансляция: {title}")
         await play_next_song(vc, gid, interaction.channel)
 
-# Play next
+# Play next song
 async def play_next_song(vc, gid, channel):
     if SONG_QUEUES[gid]:
-        audio_url, title, http_headers = SONG_QUEUES[gid].popleft()
-        before_options = "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
-        if http_headers:
-            header_pairs = [f"{k}: {v}" for k, v in http_headers.items()]
-            headers_str = "\r\n".join(header_pairs) + "\r\n"
-            before_options += f" -headers {shlex.quote(headers_str)}"
-
-        ffmpeg_opts = {"before_options": before_options, "options": "-vn"}
-
+        audio_url, title = SONG_QUEUES[gid].popleft()
+        tmp_path = None
         try:
-            # Bandcamp - скачиваем во временный файл
-            if "bandcamp.com" in audio_url:
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp_file:
-                    tmp_path = tmp_file.name
-                ydl_opts = {"format": "bestaudio/best", "outtmpl": tmp_path, "quiet": True}
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    print(f"[FFmpeg] Скачиваем Bandcamp: {title}")
-                    ydl.download([audio_url])
-                source = discord.FFmpegOpusAudio(tmp_path)
+            # Скачиваем Bandcamp во временный файл
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp_file:
+                tmp_path = tmp_file.name
+            ydl_opts = {"format": "bestaudio/best", "outtmpl": tmp_path, "quiet": True}
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                print(f"[FFmpeg] Скачиваем Bandcamp: {title}")
+                ydl.download([audio_url])
 
-                def cleanup(err):
-                    try:
-                        os.remove(tmp_path)
-                    except:
-                        pass
-                    asyncio.run_coroutine_threadsafe(play_next_song(vc, gid, channel), bot.loop)
+            source = discord.FFmpegOpusAudio(tmp_path)
 
-                vc.play(source, after=cleanup)
-                await channel.send(f"[Now Playing] {title}")
-                return
-            else:
-                # YouTube или поток
-                source = discord.FFmpegOpusAudio(audio_url, **ffmpeg_opts)
-                def after_play(err):
-                    if err:
-                        print(f"[FFmpeg] Ошибка воспроизведения {title}: {err}")
-                    asyncio.run_coroutine_threadsafe(play_next_song(vc, gid, channel), bot.loop)
-                vc.play(source, after=after_play)
-                await channel.send(f"[Now Playing] {title}")
+            def cleanup(err):
+                try:
+                    os.remove(tmp_path)
+                except:
+                    pass
+                asyncio.run_coroutine_threadsafe(play_next_song(vc, gid, channel), bot.loop)
+
+            vc.play(source, after=cleanup)
+            await channel.send(f"[Now Playing] {title}")
         except Exception as e:
             print(f"[FFmpeg] Ошибка воспроизведения {title}: {e}")
             await play_next_song(vc, gid, channel)
