@@ -136,57 +136,35 @@ async def play(interaction: discord.Interaction, song_query: str):
     elif voice_channel != vc.channel:
         await vc.move_to(voice_channel)
 
-    # YouTube search
-    ydl_opts_yt = {
+    # YouTube search only
+    ydl_opts = {
         "format": "bestaudio[abr<=96]/bestaudio",
         "noplaylist": True,
-        "youtube_include_dash_manifest": False,
-        "youtube_include_hls_manifest": False,
         "quiet": True,
         "no_warnings": True,
+        "default_search": "ytsearch",
     }
 
-    yt_query = f"ytsearch1:{song_query}"
-    tracks = []
     try:
-        results = await search_ytdlp_async(yt_query, dict(ydl_opts_yt), use_cookies=True)
-        tracks = results.get("entries") or []
+        results = await search_ytdlp_async(f"ytsearch1:{song_query}", ydl_opts, use_cookies=False)
+        tracks = results.get("entries", [])
         if not tracks:
-            raise Exception("No YouTube entries")
-    except Exception as e:
-        print(f"YT-DLP (YouTube) failed: {e}")
-        # SoundCloud fallback
-        ydl_opts_sc = {
-            "format": "bestaudio/best",
-            "noplaylist": True,
-            "quiet": True,
-            "no_warnings": True,
-            "extract_flat": "in_playlist",  # важно для поиска SC
-        }
-        sc_query = f"scsearch1:{song_query}"
-        try:
-            results = await search_ytdlp_async(sc_query, dict(ydl_opts_sc), use_cookies=False)
-            tracks = results.get("entries") or []
-            if not tracks:
-                await interaction.followup.send("Штаб: сигнал не обнаружен, канал связи пуст.")
-                return
-        except Exception as e2:
-            print(f"YT-DLP (SoundCloud) failed: {e2}")
-            await interaction.followup.send("Штаб: каналы заблокированы, доступ к частоте невозможен.")
+            await interaction.followup.send("Штаб: сигнал не обнаружен, поиск не дал результатов.")
             return
+    except Exception as e:
+        print(f"YT-DLP failed: {e}")
+        await interaction.followup.send("Штаб: ошибка поиска, попробуйте другой запрос.")
+        return
 
     # Use first track
     first = tracks[0]
     title = first.get("title", "Untitled")
-    audio_url = first.get("url") or first.get("webpage_url")
-    extractor_key = first.get("extractor_key")
-    webpage_url = first.get("webpage_url")
+    audio_url = first.get("url")
 
     gid = str(interaction.guild_id)
     if gid not in SONG_QUEUES:
         SONG_QUEUES[gid] = deque()
-    # Добавляем extractor_key и webpage_url для SC
-    SONG_QUEUES[gid].append((audio_url, title, extractor_key, webpage_url))
+    SONG_QUEUES[gid].append((audio_url, title))
 
     if vc.is_playing() or vc.is_paused():
         await interaction.followup.send(f"Штаб: сигнал **{title}** зафиксирован и добавлен в очередь ретрансляции.")
@@ -197,34 +175,28 @@ async def play(interaction: discord.Interaction, song_query: str):
 # Play next
 async def play_next_song(vc, gid, channel):
     if SONG_QUEUES[gid]:
-        audio_url, title, extractor_key, webpage_url = SONG_QUEUES[gid].popleft()
-
-        # Для SoundCloud получаем прямой поток через yt-dlp
-        if extractor_key == "SoundCloud":
-            try:
-                info = _extract(webpage_url, {"format": "bestaudio/best", "quiet": True}, use_cookies=False)
-                audio_url = info["url"]
-            except Exception as e:
-                await channel.send(f"Штаб: не удалось запустить трек SC — **{title}**. Ошибка: {e}")
-                # Переходим к следующей песне
-                await play_next_song(vc, gid, channel)
-                return
+        audio_url, title = SONG_QUEUES[gid].popleft()
 
         ffmpeg_opts = {
             "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-            "options": "-vn -c:a libopus -b:a 96k",
+            "options": "-vn",
         }
-        source = discord.FFmpegOpusAudio(audio_url, **ffmpeg_opts)
+        
+        try:
+            source = discord.FFmpegOpusAudio(audio_url, **ffmpeg_opts)
 
-        def after_play(err):
-            if err:
-                print(f"ОШИБКА {title}: {err}")
-            asyncio.run_coroutine_threadsafe(play_next_song(vc, gid, channel), bot.loop)
+            def after_play(err):
+                if err:
+                    print(f"ОШИБКА {title}: {err}")
+                asyncio.run_coroutine_threadsafe(play_next_song(vc, gid, channel), bot.loop)
 
-        vc.play(source, after=after_play)
-        asyncio.create_task(channel.send(f"Штаб: сигнал в эфире — **{title}**. Передача данных шифрована, резервные линии наготове."))
+            vc.play(source, after=after_play)
+            asyncio.create_task(channel.send(f"Штаб: сигнал в эфире — **{title}**"))
+        except Exception as e:
+            print(f"Ошибка воспроизведения {title}: {e}")
+            await play_next_song(vc, gid, channel)  # Try next song
     else:
-        await channel.send("Штаб Charlie squad: ретрансляция завершена, все узлы находятся под мониторингом, линии очищены.")
+        await channel.send("Штаб Charlie squad: ретрансляция завершена.")
         SONG_QUEUES[gid] = deque()
 
 # Run the bot
