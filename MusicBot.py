@@ -11,6 +11,9 @@ from collections import deque
 import asyncio
 import tempfile
 import shlex
+import aiohttp
+from bs4 import BeautifulSoup
+import urllib.parse
 
 # Flask setup for uptime
 app = Flask('')
@@ -31,31 +34,6 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 # Song queues
 SONG_QUEUES = {}
 
-# Async search wrapper
-async def search_ytdlp_async(query, ydl_opts, use_cookies: bool = True):
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, lambda: _extract(query, ydl_opts, use_cookies))
-
-def _extract(query, ydl_opts, use_cookies: bool = True):
-    cookie_path = None
-    if use_cookies:
-        cookie_content = os.getenv("YT_COOKIES")
-        if cookie_content:
-            with tempfile.NamedTemporaryFile(mode="w+", delete=False) as f:
-                f.write(cookie_content)
-                cookie_path = f.name
-            ydl_opts["cookiefile"] = cookie_path
-
-    try:
-        print(f"[yt-dlp] Extracting info for: {query}")
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            result = ydl.extract_info(query, download=False)
-        print(f"[yt-dlp] Extraction done: {result.get('title', 'Unknown')}")
-        return result
-    finally:
-        if cookie_path and os.path.exists(cookie_path):
-            os.remove(cookie_path)
-
 # Discord intents
 intents = discord.Intents.default()
 intents.message_content = True
@@ -68,52 +46,33 @@ async def on_ready():
     await bot.tree.sync()
     print(f"[Bot] {bot.user} v1.7 - Bandcamp only")
 
-# Helper commands: skip, pause, resume, stop
-@bot.tree.command(name="skip", description="Пропускает текущую песню")
-async def skip(interaction: discord.Interaction):
-    vc = interaction.guild.voice_client
-    if vc and (vc.is_playing() or vc.is_paused()):
-        vc.stop()
-        await interaction.response.send_message("[Skip] Сигнал переключен.")
-    else:
-        await interaction.response.send_message("[Skip] Эфир пуст.")
+# ----------------------
+# Helper: search Bandcamp
+# ----------------------
+async def search_bandcamp(query):
+    print(f"[Bandcamp] Searching for: {query}")
+    search_url = f"https://bandcamp.com/search?q={urllib.parse.quote(query)}"
+    async with aiohttp.ClientSession() as session:
+        async with session.get(search_url) as resp:
+            if resp.status != 200:
+                raise Exception(f"HTTP {resp.status}")
+            html = await resp.text()
+    soup = BeautifulSoup(html, "html.parser")
+    # Найдём первый результат трека
+    link_tag = soup.select_one('li.searchresult.track a')
+    if not link_tag:
+        raise Exception("No track found")
+    track_url = link_tag.get("href")
+    title_tag = link_tag.select_one(".heading")
+    title = title_tag.text.strip() if title_tag else track_url
+    print(f"[Bandcamp] Found track: {title} -> {track_url}")
+    return {"title": title, "url": track_url}
 
-@bot.tree.command(name="pause", description="Ставит на паузу")
-async def pause(interaction: discord.Interaction):
-    vc = interaction.guild.voice_client
-    if not vc:
-        return await interaction.response.send_message("[Pause] Нет активного сигнала.")
-    if not vc.is_playing():
-        return await interaction.response.send_message("[Pause] Сигнал уже неактивен.")
-    vc.pause()
-    await interaction.response.send_message("[Pause] Сигнал приостановлен.")
-
-@bot.tree.command(name="resume", description="Продолжить")
-async def resume(interaction: discord.Interaction):
-    vc = interaction.guild.voice_client
-    if not vc:
-        return await interaction.response.send_message("[Resume] Сигнал не восстановлен.")
-    if not vc.is_paused():
-        return await interaction.response.send_message("[Resume] Сигнал уже активен.")
-    vc.resume()
-    await interaction.response.send_message("[Resume] Сигнал восстановлен.")
-
-@bot.tree.command(name="stop", description="Остановить все и очистить очередь")
-async def stop(interaction: discord.Interaction):
-    vc = interaction.guild.voice_client
-    if not vc or not vc.is_connected():
-        return await interaction.response.send_message("[Stop] Нет активного подключения.")
-    gid = str(interaction.guild_id)
-    if gid in SONG_QUEUES:
-        SONG_QUEUES[gid].clear()
-    if vc.is_playing() or vc.is_paused():
-        vc.stop()
-    await vc.disconnect()
-    await interaction.response.send_message("[Stop] Сигнал остановлен, очередь очищена.")
-
-# Play command (Bandcamp only)
-@bot.tree.command(name="play", description="Запустить песню или добавить в очередь")
-@app_commands.describe(song_query="Название трека или ссылка Bandcamp")
+# ----------------------
+# Play command
+# ----------------------
+@bot.tree.command(name="play", description="Запустить песню или добавить в очередь (Bandcamp)")
+@app_commands.describe(song_query="Название трека")
 async def play(interaction: discord.Interaction, song_query: str):
     await interaction.response.defer()
     if not interaction.user.voice or not interaction.user.voice.channel:
@@ -127,42 +86,15 @@ async def play(interaction: discord.Interaction, song_query: str):
     elif voice_channel != vc.channel:
         await vc.move_to(voice_channel)
 
-    tracks = []
-    source_name = "Bandcamp"
-
+    # Поиск Bandcamp
     try:
-        if not song_query.startswith(('http://', 'https://')):
-            # Bandcamp search
-            ydl_opts_bc = {"format": "bestaudio/best", "noplaylist": True, "quiet": True, "no_warnings": True}
-            results = await search_ytdlp_async(f"bandcampsearch1:{song_query}", ydl_opts_bc, use_cookies=False)
-            tracks = results.get("entries", [])
-            if not tracks:
-                await interaction.followup.send("[Play] Трек не найден на Bandcamp.")
-                return
-        else:
-            # Прямая ссылка
-            ydl_opts = {"format": "bestaudio/best", "noplaylist": True, "quiet": True, "no_warnings": True}
-            results = await search_ytdlp_async(song_query, ydl_opts, use_cookies=False)
-            tracks = results.get("entries") or [results]
+        track_info = await search_bandcamp(song_query)
+        audio_url = track_info["url"]
+        title = track_info["title"]
     except Exception as e:
         print(f"[Play] Ошибка поиска Bandcamp: {e}")
-        await interaction.followup.send("[Play] Ошибка поиска трека на Bandcamp.")
+        await interaction.followup.send(f"[Play] Трек '{song_query}' не найден на Bandcamp.")
         return
-
-    # Use first track
-    first = tracks[0]
-    webpage_url = first.get("webpage_url") or first.get("url")
-    extract_opts = {"format": "bestaudio/best", "quiet": True, "no_warnings": True}
-
-    try:
-        detailed_info = await search_ytdlp_async(webpage_url, extract_opts, use_cookies=False)
-        title = detailed_info.get("title", "Untitled")
-        audio_url = detailed_info.get("url")
-        print(f"[Play] Подготовка к воспроизведению: {title}")
-    except Exception as e:
-        print(f"[Play] Ошибка извлечения деталей: {e}")
-        title = first.get("title", "Untitled")
-        audio_url = first.get("url")
 
     gid = str(interaction.guild_id)
     if gid not in SONG_QUEUES:
@@ -175,20 +107,20 @@ async def play(interaction: discord.Interaction, song_query: str):
         await interaction.followup.send(f"[Play] Активирована ретрансляция: {title}")
         await play_next_song(vc, gid, interaction.channel)
 
+# ----------------------
 # Play next song
+# ----------------------
 async def play_next_song(vc, gid, channel):
     if SONG_QUEUES[gid]:
         audio_url, title = SONG_QUEUES[gid].popleft()
-        tmp_path = None
+        # Скачиваем трек Bandcamp во временный файл
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp_file:
+            tmp_path = tmp_file.name
+        ydl_opts = {"format": "bestaudio/best", "outtmpl": tmp_path, "quiet": True}
         try:
-            # Скачиваем Bandcamp во временный файл
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp_file:
-                tmp_path = tmp_file.name
-            ydl_opts = {"format": "bestaudio/best", "outtmpl": tmp_path, "quiet": True}
+            print(f"[FFmpeg] Скачиваем Bandcamp: {title}")
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                print(f"[FFmpeg] Скачиваем Bandcamp: {title}")
                 ydl.download([audio_url])
-
             source = discord.FFmpegOpusAudio(tmp_path)
 
             def cleanup(err):
@@ -206,6 +138,47 @@ async def play_next_song(vc, gid, channel):
     else:
         await channel.send("[Queue] Очередь завершена.")
         SONG_QUEUES[gid] = deque()
+
+# ----------------------
+# Skip / Pause / Resume / Stop
+# ----------------------
+@bot.tree.command(name="skip", description="Пропускает текущую песню")
+async def skip(interaction: discord.Interaction):
+    vc = interaction.guild.voice_client
+    if vc and (vc.is_playing() or vc.is_paused()):
+        vc.stop()
+        await interaction.response.send_message("[Skip] Сигнал переключен.")
+    else:
+        await interaction.response.send_message("[Skip] Эфир пуст.")
+
+@bot.tree.command(name="pause", description="Ставит на паузу")
+async def pause(interaction: discord.Interaction):
+    vc = interaction.guild.voice_client
+    if not vc or not vc.is_playing():
+        return await interaction.response.send_message("[Pause] Сигнал уже неактивен.")
+    vc.pause()
+    await interaction.response.send_message("[Pause] Сигнал приостановлен.")
+
+@bot.tree.command(name="resume", description="Продолжить")
+async def resume(interaction: discord.Interaction):
+    vc = interaction.guild.voice_client
+    if not vc or not vc.is_paused():
+        return await interaction.response.send_message("[Resume] Сигнал уже активен.")
+    vc.resume()
+    await interaction.response.send_message("[Resume] Сигнал восстановлен.")
+
+@bot.tree.command(name="stop", description="Остановить все и очистить очередь")
+async def stop(interaction: discord.Interaction):
+    vc = interaction.guild.voice_client
+    if not vc or not vc.is_connected():
+        return await interaction.response.send_message("[Stop] Нет активного подключения.")
+    gid = str(interaction.guild_id)
+    if gid in SONG_QUEUES:
+        SONG_QUEUES[gid].clear()
+    if vc.is_playing() or vc.is_paused():
+        vc.stop()
+    await vc.disconnect()
+    await interaction.response.send_message("[Stop] Сигнал остановлен, очередь очищена.")
 
 # Run the bot
 bot.run(TOKEN)
