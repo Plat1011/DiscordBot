@@ -101,7 +101,7 @@ async def stop(interaction: discord.Interaction):
     # (Optional) Disconnect from the channel
     await voice_client.disconnect()
 
-    await interaction.response.send_message("Так, мне надо идти, всем бб")
+    await interaction.response.send_message("Я ушел за картошкой фри и сырным соусом")
 
 
 @bot.tree.command(name="play", description="Запустить песню или добавить в очередь")
@@ -110,7 +110,7 @@ async def play(interaction: discord.Interaction, song_query: str):
     await interaction.response.defer()
 
     if interaction.user.voice is None or interaction.user.voice.channel is None:
-        await interaction.followup.send("И куда мне заходить?")
+        await interaction.followup.send("И кому мне мурлыкать?")
         return
 
     voice_channel = interaction.user.voice.channel
