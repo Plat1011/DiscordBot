@@ -180,26 +180,10 @@ async def play(interaction: discord.Interaction, song_query: str):
                 raise Exception("No YouTube results")
         except Exception as e:
             print(f"YouTube search failed: {e}")
-            
-            # Try SoundCloud as fallback
-            ydl_opts_sc = {
-                "format": "bestaudio/best", 
-                "noplaylist": True,
-                "quiet": True,
-                "no_warnings": True,
-            }
-            
-            try:
-                results = await search_ytdlp_async(f"scsearch1:{song_query}", ydl_opts_sc, use_cookies=False)
-                tracks = results.get("entries", [])
-                source_name = "SoundCloud"
-                if not tracks:
-                    await interaction.followup.send("Штаб: сигнал не обнаружен на всех частотах.")
-                    return
-            except Exception as e2:
-                print(f"SoundCloud search failed: {e2}")
-                await interaction.followup.send("Штаб: все каналы заблокированы, поиск невозможен.")
-                return
+            # SoundCloud search disabled due to API authentication issues
+            # Direct SoundCloud URLs still work when pasted directly
+            await interaction.followup.send("Штаб: YouTube недоступен. Для SoundCloud используйте прямые ссылки.")
+            return
 
     # Use first track and extract detailed info with headers
     first = tracks[0]
@@ -217,6 +201,7 @@ async def play(interaction: discord.Interaction, song_query: str):
         title = detailed_info.get("title", "Untitled")
         audio_url = detailed_info.get("url")
         http_headers = detailed_info.get("http_headers", {})
+        
     except Exception as e:
         print(f"Header extraction failed: {e}")
         title = first.get("title", "Untitled")
