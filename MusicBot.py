@@ -164,7 +164,7 @@ async def play_next_song(voice_client, guild_id, channel):
             # Remove executable if FFmpeg is in PATH
         }
 
-        source = discord.FFmpegOpusAudio(audio_url, **ffmpeg_options, executable="bin\\ffmpeg\\ffmpeg")
+        source = discord.FFmpegOpusAudio(audio_url, **ffmpeg_options)
 
         def after_play(error):
             if error:
