@@ -109,11 +109,11 @@ async def stop(interaction: discord.Interaction):
 async def play(interaction: discord.Interaction, song_query: str):
     await interaction.response.defer()
 
-    voice_channel = interaction.user.voice.channel
-
-    if voice_channel is None:
+    if interaction.user.voice is None or interaction.user.voice.channel is None:
         await interaction.followup.send("И куда мне заходить?")
         return
+
+    voice_channel = interaction.user.voice.channel
 
     voice_client = interaction.guild.voice_client
 
