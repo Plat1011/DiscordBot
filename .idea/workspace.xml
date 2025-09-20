@@ -4,9 +4,8 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="fbb44ffe-14be-4efa-a6df-79436bf19677" name="Changes" comment="Starting">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/MusicBot.py" beforeDir="false" afterPath="$PROJECT_DIR$/MusicBot.py" afterDir="false" />
+    <list default="true" id="fbb44ffe-14be-4efa-a6df-79436bf19677" name="Changes" comment="Starting.2">
+      <change afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -67,11 +66,20 @@
       <option name="project" value="LOCAL" />
       <updated>1758372749023</updated>
     </task>
-    <option name="localTasksCounter" value="2" />
+    <task id="LOCAL-00002" summary="Starting.2">
+      <option name="closed" value="true" />
+      <created>1758374213991</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1758374213991</updated>
+    </task>
+    <option name="localTasksCounter" value="3" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="Starting" />
-    <option name="LAST_COMMIT_MESSAGE" value="Starting" />
+    <MESSAGE value="Starting.2" />
+    <option name="LAST_COMMIT_MESSAGE" value="Starting.2" />
   </component>
 </project>
