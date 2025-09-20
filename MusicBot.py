@@ -199,7 +199,7 @@ async def play_next_song(voice_client, guild_id, channel):
         ))
     else:
         await channel.send(
-            "Штаб Charlie squad: ретрансляция завершена, все узлы находятся под мониторингом, линии очищены."
+            "Штаб Charlie squad:  ретрансляция завершена, все узлы находятся под мониторингом, линии очищены."
         )
         SONG_QUEUES[guild_id] = deque()
 
