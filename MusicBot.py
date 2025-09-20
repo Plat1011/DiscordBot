@@ -40,7 +40,7 @@ def _extract(query, ydl_opts, use_cookies: bool = True):
     if use_cookies:
         cookie_content = os.getenv("YT_COOKIES")
         if not cookie_content:
-            raise Exception("YT_COOKIES not set in Replit secrets, cannot use cookies for YouTube.")
+            raise Exception("YT_COOKIES not set, cannot use cookies for YouTube.")
         with tempfile.NamedTemporaryFile(mode="w+", delete=False) as f:
             f.write(cookie_content)
             cookie_path = f.name
@@ -68,8 +68,9 @@ async def on_ready():
 # Skip
 @bot.tree.command(name="skip", description="Пропускает текущую песню")
 async def skip(interaction: discord.Interaction):
-    if interaction.guild.voice_client and (interaction.guild.voice_client.is_playing() or interaction.guild.voice_client.is_paused()):
-        interaction.guild.voice_client.stop()
+    vc = interaction.guild.voice_client
+    if vc and (vc.is_playing() or vc.is_paused()):
+        vc.stop()
         await interaction.response.send_message(
             "Штаб Charlie squad: ретрансляция переключена. Частота скорректирована, сигнал перенаправлен."
         )
@@ -79,12 +80,12 @@ async def skip(interaction: discord.Interaction):
 # Pause
 @bot.tree.command(name="pause", description="Ставит на паузу")
 async def pause(interaction: discord.Interaction):
-    voice_client = interaction.guild.voice_client
-    if voice_client is None:
+    vc = interaction.guild.voice_client
+    if not vc:
         return await interaction.response.send_message("Штаб: сигнал отсутствует, линии связи не задействованы.")
-    if not voice_client.is_playing():
+    if not vc.is_playing():
         return await interaction.response.send_message("Штаб: ретрансляция неактивна, пауза невозможна.")
-    voice_client.pause()
+    vc.pause()
     await interaction.response.send_message(
         "Штаб: частоты временно заморожены, передача данных приостановлена."
     )
@@ -92,12 +93,12 @@ async def pause(interaction: discord.Interaction):
 # Resume
 @bot.tree.command(name="resume", description="Продолжим")
 async def resume(interaction: discord.Interaction):
-    voice_client = interaction.guild.voice_client
-    if voice_client is None:
+    vc = interaction.guild.voice_client
+    if not vc:
         return await interaction.response.send_message("Штаб: сигнал ещё не восстановлен, линии молчат.")
-    if not voice_client.is_paused():
+    if not vc.is_paused():
         return await interaction.response.send_message("Штаб: ретрансляция и так активна, восстановление не требуется.")
-    voice_client.resume()
+    vc.resume()
     await interaction.response.send_message(
         "Штаб Charlie squad: передача данных восстановлена, резервные линии задействованы."
     )
@@ -105,18 +106,17 @@ async def resume(interaction: discord.Interaction):
 # Stop
 @bot.tree.command(name="stop", description="Остановить все и очистить очередь")
 async def stop(interaction: discord.Interaction):
-    voice_client = interaction.guild.voice_client
-    if not voice_client or not voice_client.is_connected():
+    vc = interaction.guild.voice_client
+    if not vc or not vc.is_connected():
         return await interaction.response.send_message("Штаб: нет активного подключения, остановка не требуется.")
 
-    guild_id_str = str(interaction.guild_id)
-    if guild_id_str in SONG_QUEUES:
-        SONG_QUEUES[guild_id_str].clear()
+    gid = str(interaction.guild_id)
+    if gid in SONG_QUEUES:
+        SONG_QUEUES[gid].clear()
 
-    if voice_client.is_playing() or voice_client.is_paused():
-        voice_client.stop()
-
-    await voice_client.disconnect()
+    if vc.is_playing() or vc.is_paused():
+        vc.stop()
+    await vc.disconnect()
     await interaction.response.send_message(
         "Штаб: ретрансляция завершена, частоты очищены, контрольные точки сняты."
     )
@@ -126,23 +126,19 @@ async def stop(interaction: discord.Interaction):
 @app_commands.describe(song_query="Search query")
 async def play(interaction: discord.Interaction, song_query: str):
     await interaction.response.defer()
-
-    if interaction.user.voice is None or interaction.user.voice.channel is None:
-        await interaction.followup.send(
-            "Штаб: вы не подключены к ретрансляционной вышке. Доступ к частотам невозможен."
-        )
+    if not interaction.user.voice or not interaction.user.voice.channel:
+        await interaction.followup.send("Штаб: вы не подключены к ретрансляционной вышке. Доступ к частотам невозможен.")
         return
 
     voice_channel = interaction.user.voice.channel
-    voice_client = interaction.guild.voice_client
+    vc = interaction.guild.voice_client
+    if not vc:
+        vc = await voice_channel.connect()
+    elif voice_channel != vc.channel:
+        await vc.move_to(voice_channel)
 
-    if voice_client is None:
-        voice_client = await voice_channel.connect()
-    elif voice_channel != voice_client.channel:
-        await voice_client.move_to(voice_channel)
-
-    # YouTube options
-    ydl_options_youtube = {
+    # YouTube search
+    ydl_opts_yt = {
         "format": "bestaudio[abr<=96]/bestaudio",
         "noplaylist": True,
         "youtube_include_dash_manifest": False,
@@ -151,87 +147,71 @@ async def play(interaction: discord.Interaction, song_query: str):
         "no_warnings": True,
     }
 
-    query = "ytsearch1: " + song_query
-
-    # Try YouTube first
+    yt_query = f"ytsearch1:{song_query}"
+    tracks = []
     try:
-        results = await search_ytdlp_async(query, dict(ydl_options_youtube), use_cookies=True)
-        tracks = results.get("entries")
+        results = await search_ytdlp_async(yt_query, dict(ydl_opts_yt), use_cookies=True)
+        tracks = results.get("entries") or []
         if not tracks:
             raise Exception("No YouTube entries")
     except Exception as e:
         print(f"YT-DLP (YouTube) failed: {e}")
-        # Fallback to SoundCloud
-        ydl_options_sc = {
+        # SoundCloud fallback
+        ydl_opts_sc = {
             "format": "bestaudio/best",
             "noplaylist": True,
             "quiet": True,
             "no_warnings": True,
+            "extract_flat": "in_playlist",  # важно для SoundCloud
         }
-        sc_query = "scsearch1: " + song_query
+        sc_query = f"scsearch1:{song_query}"  # без пробела
         try:
-            results = await search_ytdlp_async(sc_query, dict(ydl_options_sc), use_cookies=False)
-            tracks = results.get("entries")
+            results = await search_ytdlp_async(sc_query, dict(ydl_opts_sc), use_cookies=False)
+            tracks = results.get("entries") or []
             if not tracks:
                 await interaction.followup.send("Штаб: сигнал не обнаружен, канал связи пуст.")
                 return
         except Exception as e2:
             print(f"YT-DLP (SoundCloud) failed: {e2}")
-            await interaction.followup.send(
-                "Штаб: каналы заблокированы, доступ к частоте невозможен."
-            )
+            await interaction.followup.send("Штаб: каналы заблокированы, доступ к частоте невозможен.")
             return
 
-    # Determine correct URL
-    first_track = tracks[0]
-    if 'url' in first_track and first_track.get('extractor_key') != 'SoundCloud':
-        audio_url = first_track['url']
+    # Use first track
+    first = tracks[0]
+    audio_url = first.get("url") or first.get("webpage_url")
+    title = first.get("title", "Untitled")
+
+    gid = str(interaction.guild_id)
+    if gid not in SONG_QUEUES:
+        SONG_QUEUES[gid] = deque()
+    SONG_QUEUES[gid].append((audio_url, title))
+
+    if vc.is_playing() or vc.is_paused():
+        await interaction.followup.send(f"Штаб: сигнал **{title}** зафиксирован и добавлен в очередь ретрансляции.")
     else:
-        audio_url = first_track.get('webpage_url')
-    title = first_track.get("title", "Untitled")
-
-    guild_id = str(interaction.guild_id)
-    if SONG_QUEUES.get(guild_id) is None:
-        SONG_QUEUES[guild_id] = deque()
-
-    SONG_QUEUES[guild_id].append((audio_url, title))
-
-    if voice_client.is_playing() or voice_client.is_paused():
-        await interaction.followup.send(
-            f"Штаб: сигнал **{title}** зафиксирован и добавлен в очередь ретрансляции."
-        )
-    else:
-        await interaction.followup.send(
-            f"Штаб Charlie squad активировал ретрансляцию: **{title}**. Каналы проверены, контрольные точки выставлены."
-        )
-        await play_next_song(voice_client, guild_id, interaction.channel)
+        await interaction.followup.send(f"Штаб Charlie squad активировал ретрансляцию: **{title}**. Каналы проверены, контрольные точки выставлены.")
+        await play_next_song(vc, gid, interaction.channel)
 
 # Play next
-async def play_next_song(voice_client, guild_id, channel):
-    if SONG_QUEUES[guild_id]:
-        audio_url, title = SONG_QUEUES[guild_id].popleft()
-
-        ffmpeg_options = {
+async def play_next_song(vc, gid, channel):
+    if SONG_QUEUES[gid]:
+        audio_url, title = SONG_QUEUES[gid].popleft()
+        ffmpeg_opts = {
             "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
             "options": "-vn -c:a libopus -b:a 96k",
         }
+        source = discord.FFmpegOpusAudio(audio_url, **ffmpeg_opts)
 
-        source = discord.FFmpegOpusAudio(audio_url, **ffmpeg_options)
+        def after_play(err):
+            if err:
+                print(f"ОШИБКА {title}: {err}")
+            asyncio.run_coroutine_threadsafe(play_next_song(vc, gid, channel), bot.loop)
 
-        def after_play(error):
-            if error:
-                print(f"ОШИБКА {title}: {error}")
-            asyncio.run_coroutine_threadsafe(play_next_song(voice_client, guild_id, channel), bot.loop)
-
-        voice_client.play(source, after=after_play)
-        asyncio.create_task(channel.send(
-            f"Штаб: сигнал в эфире — **{title}**. Передача данных шифрована, резервные линии наготове."
-        ))
+        vc.play(source, after=after_play)
+        asyncio.create_task(channel.send(f"Штаб: сигнал в эфире — **{title}**. Передача данных шифрована, резервные линии наготове."))
     else:
-        await channel.send(
-            "Штаб Charlie squad: ретрансляция завершена, все узлы находятся под мониторингом, линии очищены."
-        )
-        SONG_QUEUES[guild_id] = deque()
+        await channel.send("Штаб Charlie squad: ретрансляция завершена, все узлы находятся под мониторингом, линии очищены.")
+        SONG_QUEUES[gid] = deque()
 
 # Run the bot
 bot.run(TOKEN)
