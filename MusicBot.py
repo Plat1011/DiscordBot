@@ -113,7 +113,9 @@ async def play(interaction: discord.Interaction, song_query: str):
     await interaction.response.defer()
 
     if interaction.user.voice is None or interaction.user.voice.channel is None:
-        await interaction.followup.send("Вы не подключены к ближайшей башне 5G! Без сигнала музыка не доходит.")
+        await interaction.followup.send(
+            "Вы не подключены к ближайшей башне 5G! Без сигнала музыка не доходит."
+        )
         return
 
     voice_channel = interaction.user.voice.channel
@@ -132,10 +134,19 @@ async def play(interaction: discord.Interaction, song_query: str):
     }
 
     query = "ytsearch1: " + song_query
-    results = await search_ytdlp_async(query, ydl_options)
-    tracks = results.get("entries")
-    if not tracks:
-        await interaction.followup.send("Таких не знаю в эфире 5G…")
+
+    try:
+        results = await search_ytdlp_async(query, ydl_options)
+        tracks = results.get("entries")
+        if not tracks:
+            await interaction.followup.send("Таких не знаю в эфире 5G…")
+            return
+    except Exception as e:
+        # Если yt-dlp не смог получить видео (например, YouTube требует авторизацию)
+        await interaction.followup.send(
+            "Сигналы 5G заблокировали доступ к этой песне. Кто-то контролирует эфир…"
+        )
+        print(f"YT-DLP ERROR: {e}")  # Логи для дебага
         return
 
     first_track = tracks[0]
@@ -153,6 +164,7 @@ async def play(interaction: discord.Interaction, song_query: str):
     else:
         await interaction.followup.send(f"Сейчас эфир 5G транслирует: **{title}**. Осторожно, сигнал может контролировать мысли… 😉")
         await play_next_song(voice_client, guild_id, interaction.channel)
+
 
 
 async def play_next_song(voice_client, guild_id, channel):
