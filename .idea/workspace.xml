@@ -4,9 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="fbb44ffe-14be-4efa-a6df-79436bf19677" name="Changes" comment="v.5">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-    </list>
+    <list default="true" id="fbb44ffe-14be-4efa-a6df-79436bf19677" name="Changes" comment="Soundcloud url fix 4" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -14,6 +12,7 @@
   </component>
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+    <option name="UPDATE_TYPE" value="REBASE" />
   </component>
   <component name="GitHubPullRequestSearchHistory"><![CDATA[{
   "lastFilter": {
@@ -154,7 +153,63 @@
       <option name="project" value="LOCAL" />
       <updated>1758383057994</updated>
     </task>
-    <option name="localTasksCounter" value="13" />
+    <task id="LOCAL-00013" summary="Phrases changed. cookies rework">
+      <option name="closed" value="true" />
+      <created>1758397198529</created>
+      <option name="number" value="00013" />
+      <option name="presentableId" value="LOCAL-00013" />
+      <option name="project" value="LOCAL" />
+      <updated>1758397198529</updated>
+    </task>
+    <task id="LOCAL-00014" summary="Soundcloud add">
+      <option name="closed" value="true" />
+      <created>1758397776976</created>
+      <option name="number" value="00014" />
+      <option name="presentableId" value="LOCAL-00014" />
+      <option name="project" value="LOCAL" />
+      <updated>1758397776977</updated>
+    </task>
+    <task id="LOCAL-00015" summary="Soundcloud url fix">
+      <option name="closed" value="true" />
+      <created>1758398535450</created>
+      <option name="number" value="00015" />
+      <option name="presentableId" value="LOCAL-00015" />
+      <option name="project" value="LOCAL" />
+      <updated>1758398535450</updated>
+    </task>
+    <task id="LOCAL-00016" summary="Soundcloud url fix 2">
+      <option name="closed" value="true" />
+      <created>1758398712973</created>
+      <option name="number" value="00016" />
+      <option name="presentableId" value="LOCAL-00016" />
+      <option name="project" value="LOCAL" />
+      <updated>1758398712973</updated>
+    </task>
+    <task id="LOCAL-00017" summary="Soundcloud url fix 3">
+      <option name="closed" value="true" />
+      <created>1758399304668</created>
+      <option name="number" value="00017" />
+      <option name="presentableId" value="LOCAL-00017" />
+      <option name="project" value="LOCAL" />
+      <updated>1758399304668</updated>
+    </task>
+    <task id="LOCAL-00018" summary="Soundcloud url fix 4">
+      <option name="closed" value="true" />
+      <created>1758400761428</created>
+      <option name="number" value="00018" />
+      <option name="presentableId" value="LOCAL-00018" />
+      <option name="project" value="LOCAL" />
+      <updated>1758400761428</updated>
+    </task>
+    <task id="LOCAL-00019" summary="Soundcloud url fix 4">
+      <option name="closed" value="true" />
+      <created>1758403441889</created>
+      <option name="number" value="00019" />
+      <option name="presentableId" value="LOCAL-00019" />
+      <option name="project" value="LOCAL" />
+      <updated>1758403441889</updated>
+    </task>
+    <option name="localTasksCounter" value="20" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -203,6 +258,12 @@
     <MESSAGE value="v.3" />
     <MESSAGE value="v.4" />
     <MESSAGE value="v.5" />
-    <option name="LAST_COMMIT_MESSAGE" value="v.5" />
+    <MESSAGE value="Phrases changed. cookies rework" />
+    <MESSAGE value="Soundcloud add" />
+    <MESSAGE value="Soundcloud url fix" />
+    <MESSAGE value="Soundcloud url fix 2" />
+    <MESSAGE value="Soundcloud url fix 3" />
+    <MESSAGE value="Soundcloud url fix 4" />
+    <option name="LAST_COMMIT_MESSAGE" value="Soundcloud url fix 4" />
   </component>
 </project>
