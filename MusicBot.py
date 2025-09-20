@@ -47,8 +47,11 @@ def _extract(query, ydl_opts, use_cookies: bool = True):
             ydl_opts["cookiefile"] = cookie_path
 
     try:
+        print(f"[yt-dlp] Extracting info for: {query}")
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            return ydl.extract_info(query, download=False)
+            result = ydl.extract_info(query, download=False)
+        print(f"[yt-dlp] Extraction done: {result.get('title', 'Unknown')}")
+        return result
     finally:
         if cookie_path and os.path.exists(cookie_path):
             os.remove(cookie_path)
@@ -63,71 +66,58 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 @bot.event
 async def on_ready():
     await bot.tree.sync()
-    print(f"{bot.user} снова тут")
+    print(f"[Bot] {bot.user} снова тут")
 
-# Skip
+# Helper commands: skip, pause, resume, stop
 @bot.tree.command(name="skip", description="Пропускает текущую песню")
 async def skip(interaction: discord.Interaction):
     vc = interaction.guild.voice_client
     if vc and (vc.is_playing() or vc.is_paused()):
         vc.stop()
-        await interaction.response.send_message(
-            "Штаб Charlie squad: ретрансляция переключена. Частота скорректирована, сигнал перенаправлен."
-        )
+        await interaction.response.send_message("[Skip] Сигнал переключен.")
     else:
-        await interaction.response.send_message("Штаб: эфир пуст, переключение не требуется.")
+        await interaction.response.send_message("[Skip] Эфир пуст.")
 
-# Pause
 @bot.tree.command(name="pause", description="Ставит на паузу")
 async def pause(interaction: discord.Interaction):
     vc = interaction.guild.voice_client
     if not vc:
-        return await interaction.response.send_message("Штаб: сигнал отсутствует, линии связи не задействованы.")
+        return await interaction.response.send_message("[Pause] Нет активного сигнала.")
     if not vc.is_playing():
-        return await interaction.response.send_message("Штаб: ретрансляция неактивна, пауза невозможна.")
+        return await interaction.response.send_message("[Pause] Сигнал уже неактивен.")
     vc.pause()
-    await interaction.response.send_message(
-        "Штаб: частоты временно заморожены, передача данных приостановлена."
-    )
+    await interaction.response.send_message("[Pause] Сигнал приостановлен.")
 
-# Resume
-@bot.tree.command(name="resume", description="Продолжим")
+@bot.tree.command(name="resume", description="Продолжить")
 async def resume(interaction: discord.Interaction):
     vc = interaction.guild.voice_client
     if not vc:
-        return await interaction.response.send_message("Штаб: сигнал ещё не восстановлен, линии молчат.")
+        return await interaction.response.send_message("[Resume] Сигнал не восстановлен.")
     if not vc.is_paused():
-        return await interaction.response.send_message("Штаб: ретрансляция и так активна, восстановление не требуется.")
+        return await interaction.response.send_message("[Resume] Сигнал уже активен.")
     vc.resume()
-    await interaction.response.send_message(
-        "Штаб Charlie squad: передача данных восстановлена, резервные линии задействованы."
-    )
+    await interaction.response.send_message("[Resume] Сигнал восстановлен.")
 
-# Stop
 @bot.tree.command(name="stop", description="Остановить все и очистить очередь")
 async def stop(interaction: discord.Interaction):
     vc = interaction.guild.voice_client
     if not vc or not vc.is_connected():
-        return await interaction.response.send_message("Штаб: нет активного подключения, остановка не требуется.")
-
+        return await interaction.response.send_message("[Stop] Нет активного подключения.")
     gid = str(interaction.guild_id)
     if gid in SONG_QUEUES:
         SONG_QUEUES[gid].clear()
-
     if vc.is_playing() or vc.is_paused():
         vc.stop()
     await vc.disconnect()
-    await interaction.response.send_message(
-        "Штаб: ретрансляция завершена, частоты очищены, контрольные точки сняты."
-    )
+    await interaction.response.send_message("[Stop] Сигнал остановлен, очередь очищена.")
 
-# Play
+# Play command
 @bot.tree.command(name="play", description="Запустить песню или добавить в очередь")
 @app_commands.describe(song_query="Search query")
 async def play(interaction: discord.Interaction, song_query: str):
     await interaction.response.defer()
     if not interaction.user.voice or not interaction.user.voice.channel:
-        await interaction.followup.send("Штаб: вы не подключены к ретрансляционной вышке. Доступ к частотам невозможен.")
+        await interaction.followup.send("[Play] Вы не подключены к голосовому каналу.")
         return
 
     voice_channel = interaction.user.voice.channel
@@ -140,49 +130,36 @@ async def play(interaction: discord.Interaction, song_query: str):
     tracks = []
     source_name = ""
 
-    # Check if input is a direct URL
     is_url = song_query.startswith(('http://', 'https://'))
 
-    if is_url:
-        # Handle direct URLs (YouTube or Bandcamp)
-        ydl_opts = {"format": "bestaudio/best", "noplaylist": True, "quiet": True, "no_warnings": True}
-        try:
+    try:
+        if is_url:
+            print(f"[Play] Прямая ссылка: {song_query}")
+            ydl_opts = {"format": "bestaudio/best", "noplaylist": True, "quiet": True, "no_warnings": True}
             results = await search_ytdlp_async(song_query, ydl_opts, use_cookies=False)
-            if results.get("entries"):
-                tracks = results["entries"]
-            else:
-                tracks = [results]
+            tracks = results.get("entries") or [results]
             source_name = results.get("extractor_key", "Unknown")
-        except Exception as e:
-            print(f"Direct URL failed: {e}")
-            await interaction.followup.send("Штаб: ошибка обработки ссылки.")
-            return
-    else:
-        # Search YouTube first
-        ydl_opts_yt = {"format": "bestaudio[abr<=96]/bestaudio", "noplaylist": True, "quiet": True, "no_warnings": True}
-        try:
+        else:
+            # YouTube search
+            ydl_opts_yt = {"format": "bestaudio[abr<=96]/bestaudio", "noplaylist": True, "quiet": True, "no_warnings": True}
             results = await search_ytdlp_async(f"ytsearch1:{song_query}", ydl_opts_yt, use_cookies=False)
             tracks = results.get("entries", [])
             source_name = "YouTube"
             if not tracks:
-                raise Exception("No YouTube results")
-        except Exception as e:
-            print(f"YouTube search failed: {e}")
-            # Bandcamp search fallback
-            ydl_opts_bc = {"format": "bestaudio/best", "noplaylist": True, "quiet": True, "no_warnings": True}
-            try:
+                # Bandcamp search
+                ydl_opts_bc = {"format": "bestaudio/best", "noplaylist": True, "quiet": True, "no_warnings": True}
                 results = await search_ytdlp_async(f"bandcampsearch1:{song_query}", ydl_opts_bc, use_cookies=False)
                 tracks = results.get("entries", [])
                 source_name = "Bandcamp"
-                if not tracks:
-                    await interaction.followup.send("Штаб: трек не найден на YouTube и Bandcamp.")
-                    return
-            except Exception as e2:
-                print(f"Bandcamp search failed: {e2}")
-                await interaction.followup.send("Штаб: поиск на Bandcamp невозможен.")
+            if not tracks:
+                await interaction.followup.send("[Play] Трек не найден на YouTube или Bandcamp.")
                 return
+    except Exception as e:
+        print(f"[Play] Ошибка поиска: {e}")
+        await interaction.followup.send("[Play] Ошибка поиска трека.")
+        return
 
-    # Use first track and extract detailed info
+    # Use first track
     first = tracks[0]
     webpage_url = first.get("webpage_url") or first.get("url")
     extract_opts = {"format": "bestaudio/best", "quiet": True, "no_warnings": True}
@@ -192,8 +169,9 @@ async def play(interaction: discord.Interaction, song_query: str):
         title = detailed_info.get("title", "Untitled")
         audio_url = detailed_info.get("url")
         http_headers = detailed_info.get("http_headers", {})
+        print(f"[Play] Подготовка к воспроизведению: {title} ({source_name})")
     except Exception as e:
-        print(f"Header extraction failed: {e}")
+        print(f"[Play] Ошибка извлечения деталей: {e}")
         title = first.get("title", "Untitled")
         audio_url = first.get("url")
         http_headers = {}
@@ -204,9 +182,9 @@ async def play(interaction: discord.Interaction, song_query: str):
     SONG_QUEUES[gid].append((audio_url, title, http_headers))
 
     if vc.is_playing() or vc.is_paused():
-        await interaction.followup.send(f"Штаб: сигнал **{title}** ({source_name}) добавлен в очередь ретрансляции.")
+        await interaction.followup.send(f"[Queue] {title} ({source_name}) добавлен в очередь.")
     else:
-        await interaction.followup.send(f"Штаб: активирована ретрансляция **{title}** ({source_name})")
+        await interaction.followup.send(f"[Play] Активирована ретрансляция: {title} ({source_name})")
         await play_next_song(vc, gid, interaction.channel)
 
 # Play next
@@ -222,20 +200,40 @@ async def play_next_song(vc, gid, channel):
         ffmpeg_opts = {"before_options": before_options, "options": "-vn"}
 
         try:
-            source = discord.FFmpegOpusAudio(audio_url, **ffmpeg_opts)
+            # Bandcamp - скачиваем во временный файл
+            if "bandcamp.com" in audio_url:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp_file:
+                    tmp_path = tmp_file.name
+                ydl_opts = {"format": "bestaudio/best", "outtmpl": tmp_path, "quiet": True}
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    print(f"[FFmpeg] Скачиваем Bandcamp: {title}")
+                    ydl.download([audio_url])
+                source = discord.FFmpegOpusAudio(tmp_path)
 
-            def after_play(err):
-                if err:
-                    print(f"ОШИБКА {title}: {err}")
-                asyncio.run_coroutine_threadsafe(play_next_song(vc, gid, channel), bot.loop)
+                def cleanup(err):
+                    try:
+                        os.remove(tmp_path)
+                    except:
+                        pass
+                    asyncio.run_coroutine_threadsafe(play_next_song(vc, gid, channel), bot.loop)
 
-            vc.play(source, after=after_play)
-            asyncio.create_task(channel.send(f"Штаб: сигнал в эфире — **{title}**"))
+                vc.play(source, after=cleanup)
+                await channel.send(f"[Now Playing] {title}")
+                return
+            else:
+                # YouTube или поток
+                source = discord.FFmpegOpusAudio(audio_url, **ffmpeg_opts)
+                def after_play(err):
+                    if err:
+                        print(f"[FFmpeg] Ошибка воспроизведения {title}: {err}")
+                    asyncio.run_coroutine_threadsafe(play_next_song(vc, gid, channel), bot.loop)
+                vc.play(source, after=after_play)
+                await channel.send(f"[Now Playing] {title}")
         except Exception as e:
-            print(f"Ошибка воспроизведения {title}: {e}")
+            print(f"[FFmpeg] Ошибка воспроизведения {title}: {e}")
             await play_next_song(vc, gid, channel)
     else:
-        await channel.send("Штаб Charlie squad: ретрансляция завершена.")
+        await channel.send("[Queue] Очередь завершена.")
         SONG_QUEUES[gid] = deque()
 
 # Run the bot
