@@ -136,49 +136,117 @@ async def play(interaction: discord.Interaction, song_query: str):
     elif voice_channel != vc.channel:
         await vc.move_to(voice_channel)
 
-    # YouTube search only
-    ydl_opts = {
-        "format": "bestaudio[abr<=96]/bestaudio",
-        "noplaylist": True,
+    tracks = []
+    source_name = ""
+    
+    # Check if input is a direct URL
+    is_url = song_query.startswith(('http://', 'https://'))
+    
+    if is_url:
+        # Handle direct URLs
+        ydl_opts = {
+            "format": "bestaudio/best",
+            "noplaylist": True,
+            "quiet": True,
+            "no_warnings": True,
+        }
+        
+        try:
+            results = await search_ytdlp_async(song_query, ydl_opts, use_cookies=False)
+            if results.get("entries"):
+                tracks = results["entries"]
+            else:
+                tracks = [results]  # Single track
+            source_name = results.get("extractor_key", "Unknown")
+        except Exception as e:
+            print(f"Direct URL failed: {e}")
+            await interaction.followup.send("Штаб: ошибка обработки ссылки.")
+            return
+    else:
+        # Search logic - try YouTube first, then SoundCloud
+        ydl_opts_yt = {
+            "format": "bestaudio[abr<=96]/bestaudio",
+            "noplaylist": True,
+            "quiet": True,
+            "no_warnings": True,
+        }
+        
+        try:
+            results = await search_ytdlp_async(f"ytsearch1:{song_query}", ydl_opts_yt, use_cookies=False)
+            tracks = results.get("entries", [])
+            source_name = "YouTube"
+            if not tracks:
+                raise Exception("No YouTube results")
+        except Exception as e:
+            print(f"YouTube search failed: {e}")
+            
+            # Try SoundCloud as fallback
+            ydl_opts_sc = {
+                "format": "bestaudio/best", 
+                "noplaylist": True,
+                "quiet": True,
+                "no_warnings": True,
+            }
+            
+            try:
+                results = await search_ytdlp_async(f"scsearch1:{song_query}", ydl_opts_sc, use_cookies=False)
+                tracks = results.get("entries", [])
+                source_name = "SoundCloud"
+                if not tracks:
+                    await interaction.followup.send("Штаб: сигнал не обнаружен на всех частотах.")
+                    return
+            except Exception as e2:
+                print(f"SoundCloud search failed: {e2}")
+                await interaction.followup.send("Штаб: все каналы заблокированы, поиск невозможен.")
+                return
+
+    # Use first track and extract detailed info with headers
+    first = tracks[0]
+    webpage_url = first.get("webpage_url") or first.get("url")
+    
+    # Re-extract to get headers and final URL
+    extract_opts = {
+        "format": "bestaudio/best",
         "quiet": True,
         "no_warnings": True,
-        "default_search": "ytsearch",
     }
-
+    
     try:
-        results = await search_ytdlp_async(f"ytsearch1:{song_query}", ydl_opts, use_cookies=False)
-        tracks = results.get("entries", [])
-        if not tracks:
-            await interaction.followup.send("Штаб: сигнал не обнаружен, поиск не дал результатов.")
-            return
+        detailed_info = await search_ytdlp_async(webpage_url, extract_opts, use_cookies=False)
+        title = detailed_info.get("title", "Untitled")
+        audio_url = detailed_info.get("url")
+        http_headers = detailed_info.get("http_headers", {})
     except Exception as e:
-        print(f"YT-DLP failed: {e}")
-        await interaction.followup.send("Штаб: ошибка поиска, попробуйте другой запрос.")
-        return
-
-    # Use first track
-    first = tracks[0]
-    title = first.get("title", "Untitled")
-    audio_url = first.get("url")
+        print(f"Header extraction failed: {e}")
+        title = first.get("title", "Untitled")
+        audio_url = first.get("url")
+        http_headers = {}
 
     gid = str(interaction.guild_id)
     if gid not in SONG_QUEUES:
         SONG_QUEUES[gid] = deque()
-    SONG_QUEUES[gid].append((audio_url, title))
+    SONG_QUEUES[gid].append((audio_url, title, http_headers))
 
     if vc.is_playing() or vc.is_paused():
-        await interaction.followup.send(f"Штаб: сигнал **{title}** зафиксирован и добавлен в очередь ретрансляции.")
+        await interaction.followup.send(f"Штаб: сигнал **{title}** ({source_name}) добавлен в очередь ретрансляции.")
     else:
-        await interaction.followup.send(f"Штаб Charlie squad активировал ретрансляцию: **{title}**. Каналы проверены, контрольные точки выставлены.")
+        await interaction.followup.send(f"Штаб: активирована ретрансляция **{title}** ({source_name})")
         await play_next_song(vc, gid, interaction.channel)
 
 # Play next
 async def play_next_song(vc, gid, channel):
     if SONG_QUEUES[gid]:
-        audio_url, title = SONG_QUEUES[gid].popleft()
+        audio_url, title, http_headers = SONG_QUEUES[gid].popleft()
+
+        # Build headers string for FFmpeg
+        before_options = "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
+        if http_headers:
+            header_pairs = [f"{k}: {v}" for k, v in http_headers.items()]
+            headers_str = "\\r\\n".join(header_pairs)
+            before_options += f' -headers "{headers_str}"'
 
         ffmpeg_opts = {
-            "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+            "before_options": before_options,
             "options": "-vn",
         }
         
