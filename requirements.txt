@@ -6,3 +6,4 @@ discord.py
 PyNaCl
 python-dotenv
 yt-dlp
+flask
