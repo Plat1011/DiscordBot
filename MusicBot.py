@@ -56,66 +56,55 @@ async def on_ready():
 async def skip(interaction: discord.Interaction):
     if interaction.guild.voice_client and (interaction.guild.voice_client.is_playing() or interaction.guild.voice_client.is_paused()):
         interaction.guild.voice_client.stop()
-        await interaction.response.send_message("Песня пропущенна")
+        await interaction.response.send_message("Песня пропущена через 5G-каналы.")
     else:
-        await interaction.response.send_message("Нечего пропускать")
+        await interaction.response.send_message("Нечего пропускать — эфир пуст!")
 
 
 @bot.tree.command(name="pause", description="Ставит на паузу")
 async def pause(interaction: discord.Interaction):
     voice_client = interaction.guild.voice_client
 
-    # Check if the bot is in a voice channel
     if voice_client is None:
-        return await interaction.response.send_message("Я ушел за картошкой фри и сырным соусом")
+        return await interaction.response.send_message("Я потерял сигнал 5G и ушёл в офлайн…")
 
-    # Check if something is actually playing
     if not voice_client.is_playing():
-        return await interaction.response.send_message("Включи сначала что-нибудь")
-    
-    # Pause the track
+        return await interaction.response.send_message("Нечего ставить на паузу — эфир пуст!")
+
     voice_client.pause()
-    await interaction.response.send_message("Тишину!")
+    await interaction.response.send_message("Поток 5G временно заморожен.")
 
 
 @bot.tree.command(name="resume", description="Продолжим")
 async def resume(interaction: discord.Interaction):
     voice_client = interaction.guild.voice_client
 
-    # Check if the bot is in a voice channel
     if voice_client is None:
-        return await interaction.response.send_message("Я ушел за картошкой фри и сырным соусом")
+        return await interaction.response.send_message("Сигнал 5G ещё не восстановлен…")
 
-    # Check if it's actually paused
     if not voice_client.is_paused():
-        return await interaction.response.send_message("Чтобы что-то продолжить, нужно остановить сначала")
-    
-    # Resume playback
+        return await interaction.response.send_message("Эфир и так идёт, нечего продолжать.")
+
     voice_client.resume()
-    await interaction.response.send_message("Продолжим слушать...")
+    await interaction.response.send_message("Эфир 5G снова в действии!")
 
 
 @bot.tree.command(name="stop", description="Остановить все и очистить очередь")
 async def stop(interaction: discord.Interaction):
     voice_client = interaction.guild.voice_client
 
-    # Check if the bot is in a voice channel
     if not voice_client or not voice_client.is_connected():
-        return await interaction.response.send_message("Ты сначала позови в войсик помурлыкать")
+        return await interaction.response.send_message("Нет подключения к 5G-башне, нечего отключать.")
 
-    # Clear the guild's queue
     guild_id_str = str(interaction.guild_id)
     if guild_id_str in SONG_QUEUES:
         SONG_QUEUES[guild_id_str].clear()
 
-    # If something is playing or paused, stop it
     if voice_client.is_playing() or voice_client.is_paused():
         voice_client.stop()
 
-    # (Optional) Disconnect from the channel
     await voice_client.disconnect()
-
-    await interaction.response.send_message("Я ушел за картошкой фри и сырным соусом")
+    await interaction.response.send_message("Отключаемся от 5G… башня больше не отслеживает ваш плейлист.")
 
 
 @bot.tree.command(name="play", description="Запустить песню или добавить в очередь")
@@ -124,11 +113,10 @@ async def play(interaction: discord.Interaction, song_query: str):
     await interaction.response.defer()
 
     if interaction.user.voice is None or interaction.user.voice.channel is None:
-        await interaction.followup.send("И кому мне мурлыкать?")
+        await interaction.followup.send("Вы не подключены к ближайшей башне 5G! Без сигнала музыка не доходит.")
         return
 
     voice_channel = interaction.user.voice.channel
-
     voice_client = interaction.guild.voice_client
 
     if voice_client is None:
@@ -145,10 +133,9 @@ async def play(interaction: discord.Interaction, song_query: str):
 
     query = "ytsearch1: " + song_query
     results = await search_ytdlp_async(query, ydl_options)
-    tracks = results.get("entries", [])
-
-    if tracks is None:
-        await interaction.followup.send("Таких не знаю")
+    tracks = results.get("entries")
+    if not tracks:
+        await interaction.followup.send("Таких не знаю в эфире 5G…")
         return
 
     first_track = tracks[0]
@@ -162,9 +149,9 @@ async def play(interaction: discord.Interaction, song_query: str):
     SONG_QUEUES[guild_id].append((audio_url, title))
 
     if voice_client.is_playing() or voice_client.is_paused():
-        await interaction.followup.send(f"Добавил в очередь: **{title}**")
+        await interaction.followup.send(f"Песня **{title}** передана через 5G-частоты, добавлена в очередь.")
     else:
-        await interaction.followup.send(f"Сейчас играет: **{title}**")
+        await interaction.followup.send(f"Сейчас эфир 5G транслирует: **{title}**. Осторожно, сигнал может контролировать мысли… 😉")
         await play_next_song(voice_client, guild_id, interaction.channel)
 
 
@@ -175,7 +162,6 @@ async def play_next_song(voice_client, guild_id, channel):
         ffmpeg_options = {
             "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
             "options": "-vn -c:a libopus -b:a 96k",
-            # Remove executable if FFmpeg is in PATH
         }
 
         source = discord.FFmpegOpusAudio(audio_url, **ffmpeg_options)
@@ -188,7 +174,7 @@ async def play_next_song(voice_client, guild_id, channel):
         voice_client.play(source, after=after_play)
         asyncio.create_task(channel.send(f"Сейчас играет: **{title}**"))
     else:
-        await voice_client.disconnect()
+        await channel.send("Очередь песен через 5G завершена. Жду новых сигналов!")
         SONG_QUEUES[guild_id] = deque()
 
 
