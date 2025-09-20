@@ -3,4 +3,3 @@ yt_dlp
 python-dotenv
 PyNaCl
 flask
-yt-dlp
