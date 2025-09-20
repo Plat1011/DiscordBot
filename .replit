@@ -2,7 +2,7 @@ modules = ["python-3.11"]
 
 [nix]
 channel = "stable-25_05"
-packages = ["libsodium", "ffmpeg"]
+packages = ["ffmpeg", "libsodium"]
 
 [agent]
 expertMode = true
@@ -29,3 +29,7 @@ args = "python MusicBot.py"
 
 [workflows.workflow.metadata]
 outputType = "console"
+
+[[ports]]
+localPort = 8080
+externalPort = 80
