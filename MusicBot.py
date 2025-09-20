@@ -39,12 +39,11 @@ def _extract(query, ydl_opts, use_cookies: bool = True):
     cookie_path = None
     if use_cookies:
         cookie_content = os.getenv("YT_COOKIES")
-        if not cookie_content:
-            raise Exception("YT_COOKIES not set, cannot use cookies for YouTube.")
-        with tempfile.NamedTemporaryFile(mode="w+", delete=False) as f:
-            f.write(cookie_content)
-            cookie_path = f.name
-        ydl_opts["cookiefile"] = cookie_path
+        if cookie_content:
+            with tempfile.NamedTemporaryFile(mode="w+", delete=False) as f:
+                f.write(cookie_content)
+                cookie_path = f.name
+            ydl_opts["cookiefile"] = cookie_path
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -162,9 +161,9 @@ async def play(interaction: discord.Interaction, song_query: str):
             "noplaylist": True,
             "quiet": True,
             "no_warnings": True,
-            "extract_flat": "in_playlist",  # важно для SoundCloud
+            "extract_flat": "in_playlist",  # важно для поиска SC
         }
-        sc_query = f"scsearch1:{song_query}"  # без пробела
+        sc_query = f"scsearch1:{song_query}"
         try:
             results = await search_ytdlp_async(sc_query, dict(ydl_opts_sc), use_cookies=False)
             tracks = results.get("entries") or []
