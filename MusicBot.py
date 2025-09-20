@@ -10,6 +10,7 @@ import yt_dlp
 from collections import deque
 import asyncio
 import tempfile
+import shlex
 
 # Flask setup for uptime
 app = Flask('')
@@ -242,8 +243,8 @@ async def play_next_song(vc, gid, channel):
         before_options = "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
         if http_headers:
             header_pairs = [f"{k}: {v}" for k, v in http_headers.items()]
-            headers_str = "\\r\\n".join(header_pairs)
-            before_options += f' -headers "{headers_str}"'
+            headers_str = "\r\n".join(header_pairs) + "\r\n"
+            before_options += f" -headers {shlex.quote(headers_str)}"
 
         ffmpeg_opts = {
             "before_options": before_options,
