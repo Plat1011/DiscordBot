@@ -4,4 +4,4 @@ python-dotenv
 PyNaCl
 flask
 beautifulsoup4
-requests
+requests==2.32.3
