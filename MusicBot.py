@@ -34,8 +34,16 @@ async def search_ytdlp_async(query, ydl_opts):
     return await loop.run_in_executor(None, lambda: _extract(query, ydl_opts))
 
 def _extract(query, ydl_opts):
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        return ydl.extract_info(query, download=False)
+    with open("cookies.txt", "w") as f:
+        f.write(os.getenv("YT_COOKIES"))
+
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            return ydl.extract_info(query, download=False)
+    finally:
+        # Удаляем временный файл после извлечения
+        if os.path.exists("cookies.txt"):
+            os.remove("cookies.txt")
 
 
 # Setup of intents. Intents are permissions the bot has on the server
@@ -131,7 +139,9 @@ async def play(interaction: discord.Interaction, song_query: str):
         "noplaylist": True,
         "youtube_include_dash_manifest": False,
         "youtube_include_hls_manifest": False,
+        "cookiefile": "cookies.txt"  # временный файл
     }
+
 
     query = "ytsearch1: " + song_query
 
