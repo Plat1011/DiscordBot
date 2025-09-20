@@ -177,13 +177,16 @@ async def play(interaction: discord.Interaction, song_query: str):
 
     # Use first track
     first = tracks[0]
-    audio_url = first.get("url") or first.get("webpage_url")
     title = first.get("title", "Untitled")
+    audio_url = first.get("url") or first.get("webpage_url")
+    extractor_key = first.get("extractor_key")
+    webpage_url = first.get("webpage_url")
 
     gid = str(interaction.guild_id)
     if gid not in SONG_QUEUES:
         SONG_QUEUES[gid] = deque()
-    SONG_QUEUES[gid].append((audio_url, title))
+    # Добавляем extractor_key и webpage_url для SC
+    SONG_QUEUES[gid].append((audio_url, title, extractor_key, webpage_url))
 
     if vc.is_playing() or vc.is_paused():
         await interaction.followup.send(f"Штаб: сигнал **{title}** зафиксирован и добавлен в очередь ретрансляции.")
@@ -194,7 +197,19 @@ async def play(interaction: discord.Interaction, song_query: str):
 # Play next
 async def play_next_song(vc, gid, channel):
     if SONG_QUEUES[gid]:
-        audio_url, title = SONG_QUEUES[gid].popleft()
+        audio_url, title, extractor_key, webpage_url = SONG_QUEUES[gid].popleft()
+
+        # Для SoundCloud получаем прямой поток через yt-dlp
+        if extractor_key == "SoundCloud":
+            try:
+                info = _extract(webpage_url, {"format": "bestaudio/best", "quiet": True}, use_cookies=False)
+                audio_url = info["url"]
+            except Exception as e:
+                await channel.send(f"Штаб: не удалось запустить трек SC — **{title}**. Ошибка: {e}")
+                # Переходим к следующей песне
+                await play_next_song(vc, gid, channel)
+                return
+
         ffmpeg_opts = {
             "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
             "options": "-vn -c:a libopus -b:a 96k",
