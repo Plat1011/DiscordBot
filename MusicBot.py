@@ -14,6 +14,10 @@ import shlex
 import aiohttp
 from bs4 import BeautifulSoup
 import urllib.parse
+import sys
+print(sys.executable)
+print(sys.path)
+
 
 # Flask setup for uptime
 app = Flask('')

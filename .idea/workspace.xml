@@ -4,7 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="fbb44ffe-14be-4efa-a6df-79436bf19677" name="Changes" comment="-yt" />
+    <list default="true" id="fbb44ffe-14be-4efa-a6df-79436bf19677" name="Changes" comment="requirements fix" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -230,7 +230,23 @@
       <option name="project" value="LOCAL" />
       <updated>1758406509606</updated>
     </task>
-    <option name="localTasksCounter" value="22" />
+    <task id="LOCAL-00022" summary="Banditcamp fix">
+      <option name="closed" value="true" />
+      <created>1758406714030</created>
+      <option name="number" value="00022" />
+      <option name="presentableId" value="LOCAL-00022" />
+      <option name="project" value="LOCAL" />
+      <updated>1758406714030</updated>
+    </task>
+    <task id="LOCAL-00023" summary="requirements fix">
+      <option name="closed" value="true" />
+      <created>1758406812158</created>
+      <option name="number" value="00023" />
+      <option name="presentableId" value="LOCAL-00023" />
+      <option name="project" value="LOCAL" />
+      <updated>1758406812158</updated>
+    </task>
+    <option name="localTasksCounter" value="24" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -287,6 +303,8 @@
     <MESSAGE value="Soundcloud url fix 4" />
     <MESSAGE value="revert 4" />
     <MESSAGE value="-yt" />
-    <option name="LAST_COMMIT_MESSAGE" value="-yt" />
+    <MESSAGE value="Banditcamp fix" />
+    <MESSAGE value="requirements fix" />
+    <option name="LAST_COMMIT_MESSAGE" value="requirements fix" />
   </component>
 </project>
