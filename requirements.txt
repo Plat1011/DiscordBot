@@ -2,3 +2,7 @@ discord.py
 yt_dlp
 python-dotenv
 PyNaCl
+discord.py
+PyNaCl
+python-dotenv
+yt-dlp
