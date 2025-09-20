@@ -42,14 +42,14 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 @bot.event
 async def on_ready():
     await bot.tree.sync()
-    print(f"[Bot] {bot.user} v1.8 - Bandcamp only with debug")
+    print(f"[Bot] {bot.user} v1.9 - Bandcamp only with debug")
 
 # -----------------------------
 # Helper functions
 # -----------------------------
 def search_bandcamp(query):
     """Ищем первый трек на Bandcamp по запросу с дебагом"""
-    search_url = f"https://bandcamp.com/search?q={query.replace(' ', '+')}"
+    search_url = f"https://bandcamp.com/search?q={query.replace(' ', '+')}&item_type="
     print(f"[Debug] Поиск Bandcamp по URL: {search_url}")
     try:
         resp = requests.get(search_url, timeout=10)
@@ -58,12 +58,15 @@ def search_bandcamp(query):
             print("[Debug] Ошибка запроса к Bandcamp")
             return None
         soup = BeautifulSoup(resp.text, "html.parser")
-        results = soup.select("li.searchresult.track a")
-        print(f"[Debug] Найдено треков: {len(results)}")
-        if results:
-            track_url = results[0]["href"]
-            print(f"[Debug] Первый трек: {track_url}")
-            return track_url
+        # Ищем все ссылки на треки
+        track_links = soup.find_all("a", href=True)
+        print(f"[Debug] Найдено ссылок: {len(track_links)}")
+        for link in track_links:
+            href = link["href"]
+            if href.startswith("https://") and "bandcamp.com/track/" in href:
+                print(f"[Debug] Найден трек: {href}")
+                return href
+        print("[Debug] Трек не найден")
         return None
     except Exception as e:
         print(f"[Debug] Ошибка поиска Bandcamp: {e}")
