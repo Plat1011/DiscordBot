@@ -31,11 +31,6 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 # Song queues
 SONG_QUEUES = {}
 
-# Async search wrapper
-async def search_ytdlp_async(query, ydl_opts, use_cookies: bool = True):
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, lambda: _extract(query, ydl_opts, use_cookies))
-
 def _extract(query, ydl_opts, use_cookies: bool = True):
     cookie_path = None
     if use_cookies:
@@ -55,6 +50,13 @@ def _extract(query, ydl_opts, use_cookies: bool = True):
     finally:
         if cookie_path and os.path.exists(cookie_path):
             os.remove(cookie_path)
+
+
+# Async search wrapper
+async def search_ytdlp_async(query, ydl_opts, use_cookies: bool = True):
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, lambda: _extract(query, ydl_opts, use_cookies))
+
 
 # Discord intents
 intents = discord.Intents.default()
